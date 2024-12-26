@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Call</title>
+</head>
+<body>
+    <h1>Аудіо-дзвінок</h1>
+    <button id="startCall">Розпочати дзвінок</button>
+    <button id="answerCall">Прийняти дзвінок</button>
+    <textarea id="signalingData" rows="10" cols="50" placeholder="Скопіюйте/вставте дані сюди"></textarea>
+    <script>
+        const servers = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+        const peerConnection = new RTCPeerConnection(servers);
+        let localStream;
+
+        // Додати аудіо-стрім
+        async function setupLocalStream() {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+                console.log("Локальний аудіо-стрім додано.");
+            } catch (err) {
+                console.error("Помилка доступу до мікрофона:", err);
+            }
+        }
+
+        // Відправлення offer
+        document.getElementById('startCall').onclick = async () => {
+            await setupLocalStream();
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+
+            console.log("Offer створено. Скопіюйте та передайте це іншій стороні:");
+            document.getElementById('signalingData').value = JSON.stringify(peerConnection.localDescription);
+        };
+
+        // Прийняття offer та створення answer
+        document.getElementById('answerCall').onclick = async () => {
+            const remoteOffer = document.getElementById('signalingData').value;
+            if (!remoteOffer) {
+                alert("Будь ласка, вставте дані offer іншої сторони.");
+                return;
+            }
+
+            try {
+                await peerConnection.setRemoteDescription(JSON.parse(remoteOffer));
+                console.log("Remote offer встановлено.");
+
+                await setupLocalStream();
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+
+                console.log("Answer створено. Скопіюйте та передайте це іншій стороні:");
+                document.getElementById('signalingData').value = JSON.stringify(peerConnection.localDescription);
+            } catch (err) {
+                console.error("Помилка обробки offer/answer:", err);
+            }
+        };
+
+        // Обробка вхідних стрімів
+        peerConnection.ontrack = (event) => {
+            console.log("Вхідний аудіо-стрім отримано.");
+            const audio = document.createElement('audio');
+            audio.srcObject = event.streams[0];
+            audio.autoplay = true;
+            document.body.appendChild(audio);
+        };
+
+        // Логи для перевірки стану з'єднання
+        peerConnection.onicecandidate = (event) => {
+            if (event.candidate) {
+                console.log("Новий ICE-кандидат:", event.candidate);
+            }
+        };
+
+        peerConnection.onconnectionstatechange = () => {
+            console.log("Стан з'єднання:", peerConnection.connectionState);
+        };
+    </script>
+</body>
+</html>
